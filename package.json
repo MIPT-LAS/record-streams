@@ -1,0 +1,25 @@
+{
+  "name": "record-streams",
+  "version": "1.0.0",
+  "description": "Record N streams to a single file for reproducible playback.",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha -R spec"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/swift-nav/record-streams.git"
+  },
+  "keywords": [
+    "record",
+    "streams",
+    "playback",
+    "stream"
+  ],
+  "author": "Joshua Gross <joshua.gross@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/swift-nav/record-streams/issues"
+  },
+  "homepage": "https://github.com/swift-nav/record-streams#readme"
+}
