@@ -2,9 +2,10 @@
   "name": "record-streams",
   "version": "1.0.0",
   "description": "Record N streams to a single file for reproducible playback.",
-  "main": "index.js",
+  "main": "src/index.js",
   "scripts": {
-    "test": "mocha -R spec"
+    "test": "mocha -R spec -r babel-register",
+    "build": "babel src -d lib"
   },
   "repository": {
     "type": "git",
@@ -21,5 +22,13 @@
   "bugs": {
     "url": "https://github.com/swift-nav/record-streams/issues"
   },
-  "homepage": "https://github.com/swift-nav/record-streams#readme"
+  "homepage": "https://github.com/swift-nav/record-streams#readme",
+  "devDependencies": {
+    "babel-cli": "^6.11.4",
+    "babel-preset-es2015": "^6.13.2"
+  },
+  "dependencies": {
+    "binary-parser": "^1.1.5",
+    "lodash": "^4.15.0"
+  }
 }
