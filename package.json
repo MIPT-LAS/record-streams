@@ -1,12 +1,16 @@
 {
   "name": "record-streams",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Record N streams to a single file for reproducible playback.",
-  "main": "src/index.js",
+  "main": "lib/index.js",
   "scripts": {
     "test": "mocha -R spec -r babel-register",
     "build": "babel src -d lib"
   },
+  "files": [
+    "package.json",
+    "lib/"
+  ],
   "repository": {
     "type": "git",
     "url": "git+ssh://git@github.com/swift-nav/record-streams.git"
