@@ -1,6 +1,6 @@
 {
   "name": "record-streams",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Record N streams to a single file for reproducible playback.",
   "main": "lib/index.js",
   "scripts": {

@@ -10,6 +10,7 @@
  * WARRANTIES OF MERCHANTABILITY AND/OR FITNESS FOR A PARTICULAR PURPOSE.
  */
 
+import fs from 'fs';
 import { PassThrough } from 'stream';
 import { Parser } from 'binary-parser';
 import zipObject from 'lodash/zipObject';
