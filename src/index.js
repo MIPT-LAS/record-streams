@@ -15,8 +15,10 @@ import { PassThrough } from 'stream';
 import zipObject from 'lodash/zipObject';
 import { headParser, multiplexedStreamParser, streamChunkParser } from './parser';
 import crc16 from './crc16';
+import { JSONParseError, CRCValidationError, HeaderParseError, wrapFnException } from './errors';
 
 export { headParser, multiplexedStreamParser, streamChunkParser };
+export { JSONParseError, CRCValidationError, HeaderParseError };
 
 const protocolVersion = 1;
 const streamIdOffset = 1;
@@ -26,6 +28,10 @@ const streamIdOffset = 1;
 // TODO: write binary format for stream recorder
 // TODO: write binary format for stream playback
 // TODO: test record/playback
+
+// Functions wrapped for custom exceptions.
+const parseJSON = wrapFnException(JSON.parse.bind(JSON), JSONParseError);
+const headParserWrapped = wrapFnException(headParser.parse.bind(headParser), HeaderParseError);
 
 /**
  * Make a buffer composed of one UInt8.
@@ -140,6 +146,8 @@ export function multiplexStreams (streams, maxDataGap=1000*60, crcBufferSize=150
 
   const multiplexedStream = new PassThrough();
 
+  // This metadata isn't very useful currently, but the idea is that
+  // we should support adding arbitrary metadata here in the future.
   const streamsMeta = streams.map((s, id) => {
     return { id: id + streamIdOffset };
   });
@@ -163,6 +171,9 @@ export function multiplexStreams (streams, maxDataGap=1000*60, crcBufferSize=150
 
   const headerBuf = Buffer.concat(headerBufs);
   multiplexedStream.write(headerBuf);
+
+  // CRC is computed on contents of headerBuf: the buffer in between protocolVersion+headerLen
+  // and the CRC, exclusive.
   multiplexedStream.write(mkBuf16le(crc16(headerBuf)));
 
   let crc = 0;
@@ -282,6 +293,16 @@ export function demultiplexStream (stream, useRealOffsets, callback) {
   let chunkProcessor = null;
   let lastChunkSent = null;
 
+  function broadcastError (e) {
+    const keys = Object.keys(streamDict);
+    keys.map(k => streamDict[k].emit('error', e));
+  }
+
+  function endStreams () {
+    const keys = Object.keys(streamDict);
+    keys.map(k => streamDict[k].end());
+  }
+
   function processChunks () {
     clearTimeout(chunkProcessor);
 
@@ -319,23 +340,47 @@ export function demultiplexStream (stream, useRealOffsets, callback) {
     return 3 + (c.streamId === 0 ? 2 : c.data.length + 1);
   }
 
+  function parseBufferWrapped () {
+    try {
+      return parseBuffer();
+    } catch (e) {
+      if (!parsedHead && e.name !== HeaderParseError.name) {
+        stream.end();
+        return callback(e);
+      }
+      if (e.name === CRCValidationError.name) {
+        broadcastError(e);
+        return stream.end();
+      }
+      throw e;
+    }
+  }
+
   function parseBuffer () {
     if (buffered.length === 0) {
       return;
     }
 
     if (!parsedHead) {
-      try {
-        head = headParser.parse(buffered);
-        parsedHead = true;
-        buffered = buffered.slice(head.headerLen);
-        const streamKeys =  head.meta.map(m => m.streamId);
-        const streams = head.meta.map(() => new PassThrough());
-        streamDict = zipObject(streamKeys, streams);
-        callback(null, streams);
-        // TODO: check CRC
-      } catch (e) {
+      // Parse head from buffer
+      head = headParserWrapped(buffered);
+
+      // Remove head section from buffer
+      const headContentsBuf = buffered.slice(5, head.headerLen - 2);
+      buffered = buffered.slice(head.headerLen);
+
+      // Check CRC
+      if (head.crc !== crc16(headContentsBuf)) {
+        throw new CRCValidationError('Incorrect crc for header');
       }
+
+      // Construct streams, callback
+      const streamKeys =  head.meta.map(m => m.streamId);
+      const streams = head.meta.map(() => new PassThrough());
+      const metadata = head.meta.map(m => parseJSON(m.metaString));
+      streamDict = zipObject(streamKeys, streams);
+      parsedHead = true;
+      callback(null, streams, metadata);
     } else {
       // Parse one chunk at a time...
       // We do this in case the stream is partial, or if there's corruption at the end -
@@ -358,7 +403,7 @@ export function demultiplexStream (stream, useRealOffsets, callback) {
 
         // is this a CRC? check that our CRC is up-to-date if so
         if (c.streamId === 0 && chunksCrc !== c.data.crc) {
-          throw new Error('Incorrect CRC: ' + chunksCrc + ' vs ' + c.data.crc);
+          throw new CRCValidationError('Incorrect CRC: ' + chunksCrc + ' vs ' + c.data.crc);
         }
 
         // update CRC
@@ -373,12 +418,14 @@ export function demultiplexStream (stream, useRealOffsets, callback) {
     processChunks();
 
     // keep parsing!
-    setImmediate(parseBuffer);
+    setImmediate(parseBufferWrapped);
   }
 
   stream.on('data', data => {
     buffered = Buffer.concat([buffered, data]);
 
-    parseBuffer();
+    parseBufferWrapped();
   });
+
+  stream.on('finish', () => endStreams());
 }
