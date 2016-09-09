@@ -1,6 +1,8 @@
 import { PassThrough } from 'stream';
-import { multiplexStreams, headParser, multiplexedStreamParser, demultiplexBuffer } from '../src/';
 import assert from 'assert';
+import path from 'path';
+import { multiplexStreams, headParser, multiplexedStreamParser,
+  demultiplexBuffer, demultiplexFile } from '../src/';
 
 const binaryFibBuffer = 'AAEBAwUIDRUiN1kAAQEDBQgNFSI3WQABAQMFCA0VIjdZAAEBAwUIDRUiN1kAAQEDBQgNFSI3WQABAQMFCA0VIjdZAAEBAwUIDRUiN1kAAQEDBQgNFSI3WQABAQMFCA0VIjdZAAEBAwUIDRUiN1kAAQEDBQgNFSI3WQABAQMFCA0VIjdZ';
 const binaryFibBufferLarger = 'AAEBAwUIDRUiN1kAAQEDBQgNFSI3WQABAQMFCA0VIjdZAAEBAwUIDRUiN1kAAQEDBQgNFSI3WQABAQMFCA0VIjdZAAEBAwUIDRUiN1kAAQEDBQgNFSI3WQABAQMFCA0VIjdZAAEBAwUIDRUiN1kAAQEDBQgNFSI3WQABAQMFCA0VIjdZAAEBAwUIDRUiN1kAAQEDBQgNFSI3WQABAQMFCA0VIjdZAAEBAwUIDRUiN1kAAQEDBQgNFSI3WQABAQMFCA0VIjdZAAEBAwUIDRUiN1kAAQEDBQgNFSI3WQABAQMFCA0VIjdZAAEBAwUIDRUiN1kAAQEDBQgNFSI3WQABAQMFCA0VIjdZAAEBAwUIDRUiN1kAAQEDBQgNFSI3WQABAQMFCA0VIjdZAAEBAwUIDRUiN1kAAQEDBQgNFSI3WQABAQMFCA0VIjdZAAEBAwUIDRUiN1kAAQEDBQgNFSI3WQABAQMFCA0VIjdZAAEBAwUIDRUiN1kAAQEDBQgNFSI3WQABAQMFCA0VIjdZAAEBAwUIDRUiN1kAAQEDBQgNFSI3WQABAQMFCA0VIjdZAAEBAwUIDRUiN1kAAQEDBQgNFSI3WQABAQMFCA0VIjdZAAEBAwUIDRUiN1kAAQEDBQgNFSI3WQABAQMFCA0VIjdZAAEBAwUIDRUiN1kAAQEDBQgNFSI3WQABAQMFCA0VIjdZ';
@@ -266,7 +268,7 @@ describe('demultiplexStream', () => {
     });
   });
 
-  it('should take medium-byte-message-size multiplexed stream, ensure no CRC errors', () => {
+  it('should take medium-byte-message-size multiplexed stream, ensure no CRC errors', (done) => {
     const data = new Buffer(mediumMsgMultiplexed, 'base64');
     const streamIdsInOrder = [];
     demultiplexBuffer(data, false, (err, streams) => {
@@ -284,7 +286,7 @@ describe('demultiplexStream', () => {
     });
   });
 
-  it('should take large-byte-message-size multiplexed stream, ensure no CRC errors', () => {
+  it('should take large-byte-message-size multiplexed stream, ensure no CRC errors', (done) => {
     const data = new Buffer(largeMsgMultiplexed, 'base64');
     const streamIdsInOrder = [];
     demultiplexBuffer(data, false, (err, streams) => {
@@ -296,9 +298,22 @@ describe('demultiplexStream', () => {
       });
 
       setTimeout(() => {
-        assert.deepEqual(streamIdsInOrder, [ 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0 ]);
+        const ones = Array(6).fill(1);
+        const zeroes = Array(3).fill(0);
+        const end = [].concat.apply([], Array(5).fill(zeroes));
+        const zeroone = [].concat.apply([], [ones, zeroes]);
+        const expected = [].concat.apply([], Array(5).fill(zeroone).concat(end));
+        assert.deepEqual(streamIdsInOrder, expected);
         done();
       }, 100);
+    });
+  });
+});
+
+describe('demultiplex file', () => {
+  it('should demultiplex multiple SBP streams', (done) => {
+    demultiplexFile(path.resolve(__dirname, './fixtures/sbp.multiplexed'), false, (err, streams) => {
+      setTimeout(done, 500);
     });
   });
 });

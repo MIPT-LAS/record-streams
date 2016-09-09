@@ -40,7 +40,7 @@ const streamChunkDataParser = new Parser()
     type: 'uint8'
   });
 
-const streamChunkParser = new Parser()
+export const streamChunkParser = new Parser()
   .endianess('little')
   .uint8('streamId')
   .uint16le('offset') // time since last message was output

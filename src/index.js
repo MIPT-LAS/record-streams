@@ -13,10 +13,10 @@
 import fs from 'fs';
 import { PassThrough } from 'stream';
 import zipObject from 'lodash/zipObject';
-import { headParser, multiplexedStreamParser } from './parser';
+import { headParser, multiplexedStreamParser, streamChunkParser } from './parser';
 import crc16 from './crc16';
 
-export { headParser, multiplexedStreamParser };
+export { headParser, multiplexedStreamParser, streamChunkParser };
 
 const protocolVersion = 1;
 const streamIdOffset = 1;
@@ -315,6 +315,10 @@ export function demultiplexStream (stream, useRealOffsets, callback) {
     }
   }
 
+  function chunkBufSize (c) {
+    return 3 + (c.streamId === 0 ? 2 : c.data.length + 1);
+  }
+
   function parseBuffer () {
     if (buffered.length === 0) {
       return;
@@ -333,15 +337,24 @@ export function demultiplexStream (stream, useRealOffsets, callback) {
       } catch (e) {
       }
     } else {
-      const parsedChunks = multiplexedStreamParser.parse(buffered);
-      let byteOffset = 0;
+      // Parse one chunk at a time...
+      // We do this in case the stream is partial, or if there's corruption at the end -
+      // we still want to return earlier valid data
+      while (true) {
+        let c;
+        try {
+          c = streamChunkParser.parse(buffered);
+        } catch (e) {
+          break;
+        }
 
-      // Calculate which bytes have been processed, and check CRC
-      parsedChunks.streamChunks.forEach(c => {
         // add each chunk to the processing queue
-        unprocessedChunks.push(c);
+        if (c.streamId !== 0) {
+          unprocessedChunks.push(c);
+        }
 
-        const chunkBufSize = 3 + (c.streamId === 0 ? 2 : c.data.length + 1);
+        // Calculate which bytes have been processed, and check CRC
+        const size = chunkBufSize(c);
 
         // is this a CRC? check that our CRC is up-to-date if so
         if (c.streamId === 0 && chunksCrc !== c.data.crc) {
@@ -349,14 +362,11 @@ export function demultiplexStream (stream, useRealOffsets, callback) {
         }
 
         // update CRC
-        chunksCrc = crc16(buffered.slice(byteOffset, byteOffset+chunkBufSize), chunksCrc);
+        chunksCrc = crc16(buffered.slice(0, size), chunksCrc);
 
-        // add this chunk to byte offset
-        byteOffset += chunkBufSize;
-      });
-
-      // slice parsed chunks out of buffer
-      buffered = buffered.slice(byteOffset);
+        // slice parsed chunks out of buffer
+        buffered = buffered.slice(size);
+      }
     }
 
     clearTimeout(chunkProcessor);
