@@ -213,6 +213,7 @@ export function recordStreams (streams, filename, appendIntervalMs=1000, maxData
   }, appendIntervalMs);
   outStream.on('close', () => clearInterval(interval));
   outStream.on('finish', () => clearInterval(interval));
+  return outStream;
 }
 
 /**
