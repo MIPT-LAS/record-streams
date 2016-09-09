@@ -177,6 +177,34 @@ describe('multiplexStreams', () => {
       done();
     }, 1500);
   });
+
+  it('streams should be cancelable', (done) => {
+    const s1 = makeStream(new Buffer([1]), 1500, 110);
+    const s2 = makeStream(new Buffer([2]), 500, 50);
+
+    let composedBuf = new Buffer(0);
+    const s3 = multiplexStreams([s1, s2]);
+    s3.on('data', data => {
+      composedBuf = Buffer.concat([composedBuf, data]);
+    });
+    setTimeout(() => {
+      s3.end();
+    }, 750);
+    return setTimeout(() => {
+      const header = headParser.parse(composedBuf);
+      const headerLen = header.headerLen;
+      assert.equal(headerLen, 38);
+      const chunksBuffer = composedBuf.slice(headerLen);
+      const parsedChunks = multiplexedStreamParser.parse(chunksBuffer);
+      const streamChunks = parsedChunks.streamChunks;
+
+      // 14 messages + 1 CRC
+      // a full non-canceled run would have 20 messages
+      assert.equal(streamChunks.length, 15);
+
+      done();
+    }, 1500);
+  });
 });
 
 describe('demultiplexStream', () => {

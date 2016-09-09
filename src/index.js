@@ -258,6 +258,7 @@ export function multiplexStreams (streams, maxDataGap=1000*60, crcBufferSize=150
   let crc = 0;
   let crcProcessedBytes = 0;
   let streamsAlive = 0;
+  let canWrite = true;
 
   // send a CRC or offset chunk every so often
   // our 17-bit crc (CRC16) boils all messages down to one of 65,536 values
@@ -270,7 +271,11 @@ export function multiplexStreams (streams, maxDataGap=1000*60, crcBufferSize=150
   //
   // We also want to send a CRC with timestamp offset every 60 seconds, since we have
   // offset overflow at a little over 60 seconds.
-  function checkCrc () {
+  function maybeSendCrc () {
+    if (!canWrite) {
+      return;
+    }
+
     const now = Date.now();
     const diff = now - lastMsgTime;
     if (diff > maxDataGap || crcProcessedBytes > crcBufferSize || streamsAlive === 0) {
@@ -285,12 +290,13 @@ export function multiplexStreams (streams, maxDataGap=1000*60, crcBufferSize=150
     }
   }
 
-  streams.forEach((s, id) => {
-    streamsAlive++;
-
-    s.on('data', data => {
+  function makeListener (id) {
+    return data => {
       if (!Buffer.isBuffer(data)) {
         throw new Error('data coming over stream must be Buffer');
+      }
+      if (!canWrite) {
+        return;
       }
       const now = Date.now();
       const diff = now - lastMsgTime;
@@ -301,19 +307,35 @@ export function multiplexStreams (streams, maxDataGap=1000*60, crcBufferSize=150
 
       crc = crc16(buf, crc);
       crcProcessedBytes += buf.length;
-      checkCrc();
-    });
+      maybeSendCrc();
+    }
+  }
 
-    s.on('finish', () => {
-      streamsAlive--;
-      checkCrc();
-    })
+  function finishStream (s, id) {
+    streamsAlive--;
+    maybeSendCrc();
+    s.removeAllListeners('data');
+    s.removeAllListeners('finish');
+  }
+
+  const streamListeners = streams.map((s, id) => makeListener(id));
+
+  streams.forEach((s, id) => {
+    streamsAlive++;
+    s.on('data', streamListeners[id]);
+    s.on('finish', () => finishStream(s, id))
   });
 
-  const interval = setInterval(checkCrc, 1000);
-  multiplexedStream.on('end', () => clearInterval(interval));
-  multiplexedStream.on('finish', () => clearInterval(interval));
+  const interval = setInterval(maybeSendCrc, 1000);
 
+  function stop () {
+    canWrite = false;
+    clearInterval(interval);
+    streams.forEach((s, id) => finishStream(s, id));
+  }
+
+  multiplexedStream.on('end', () => stop());
+  multiplexedStream.on('finish', () => stop());
   return multiplexedStream;
 }
 
