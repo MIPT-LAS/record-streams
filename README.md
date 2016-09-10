@@ -6,6 +6,8 @@ Because of `Node.js`'s excellent [streaming](https://nodejs.org/api/stream.html)
 
 A trivial but real-world example: let's say you have three servers that expose a streaming binary interface. The binary interfaces emit events in a binary protocol at about 15 times per second, or about every 66 milliseconds. You have a dashboard that consumes these streams in real times and shows summary statistics. About every 10 minutes, the dashboard crashes - what to do? Now you can collect a single log of all the streaming input to your application, and replay it as many times as you need to isolate and fix the bug - and you also have a test fixture to run through tests repeatedly! 
 
+See `test/index.js` for examples of how to hook up basic streams and demultiplex them.
+
 ## Install
 Install as a dependency to a project:
 
